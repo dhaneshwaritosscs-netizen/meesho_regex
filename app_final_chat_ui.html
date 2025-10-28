@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Data Extractor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            height: 100vh;
+            background: #f5f5f5;
+        }
+        
+        .sidebar {
+            width: 280px;
+            background: #202123;
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+        }
+        
+        .sidebar-header {
+            padding: 12px;
+        }
+        
+        .new-chat-btn {
+            width: 100%;
+            padding: 12px;
+            background: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-bottom: 12px;
+        }
+        
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #4a4a4a;
+            border-radius: 8px;
+            background: #2b2b2b;
+            color: white;
+            margin-bottom: 12px;
+        }
+        
+        .chat-list {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 12px;
+        }
+        
+        .chat-item {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            color: #d1d5db;
+            font-size: 14px;
+        }
+        
+        .chat-item:hover {
+            background: #343541;
+        }
+        
+        .chat-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10a37f;
+        }
+        
+        .footer {
+            border-top: 1px solid #4a4a4a;
+            padding-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #10a37f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .user-info {
+            flex: 1;
+            color: #d1d5db;
+        }
+        
+        .username {
+            font-size: 14px;
+        }
+        
+        .status {
+            font-size: 12px;
+            color: #8e8ea0;
+        }
+        
+        .upgrade-btn {
+            padding: 8px 16px;
+            background: #202123;
+            border: 1px solid #4a4a4a;
+            border-radius: 8px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+        
+        .header {
+            padding: 20px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .header h1 {
+            font-size: 20px;
+            color: #202123;
+        }
+        
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        
+        .message {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            flex-shrink: 0;
+        }
+        
+        .ai-avatar {
+            background: #5436da;
+        }
+        
+        .user-avatar {
+            background: #19c37d;
+        }
+        
+        .message-content {
+            flex: 1;
+        }
+        
+        .message-text {
+            line-height: 1.6;
+            color: #374151;
+            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+        
+        .input-container {
+            border-top: 1px solid #e5e5e5;
+            padding: 20px;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+        
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+        
+        .input-field {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            font-size: 16px;
+            resize: none;
+            max-height: 200px;
+            font-family: inherit;
+        }
+        
+        .input-field:focus {
+            outline: none;
+            border-color: #10a37f;
+        }
+        
+        .file-btn, .send-btn {
+            width: 42px;
+            height: 42px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        
+        .file-btn {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        
+        .send-btn {
+            background: #10a37f;
+            color: white;
+        }
+        
+        .results {
+            margin-top: 16px;
+        }
+        
+        .result-item {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .result-label {
+            font-weight: 600;
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        
+        .result-value {
+            color: #111827;
+            font-size: 16px;
+        }
+        
+        .message-text a {
+            color: #3b82f6;
+            text-decoration: underline;
+        }
+        
+        .message-text a:hover {
+            color: #2563eb;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <button class="new-chat-btn">+ New chat</button>
+            <input type="text" class="search-box" placeholder="Search chats...">
+        </div>
+        <div class="chat-list">
+            <div class="chat-item">
+                <div class="chat-header">
+                    <span class="dot"></span>
+                    <span>New Chat 8</span>
+                    <span style="margin-left: auto; font-size: 12px; color: #8e8ea0;">10/28/2025</span>
+                </div>
+            </div>
+        </div>
+        <div class="footer">
+            <div class="avatar">D</div>
+            <div class="user-info">
+                <div class="username">Dhani</div>
+                <div class="status">Free</div>
+            </div>
+            <button class="upgrade-btn">Upgrade</button>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <h1>URL Data Extractor</h1>
+        </div>
+        <div class="chat-container" id="chatContainer">
+            <div class="message">
+                <div class="message-avatar ai-avatar">AI</div>
+                <div class="message-content">
+                    <div class="message-text">
+                        Hello! I can help you extract product information from e-commerce websites. You can either:<br>
+                        • Paste URLs directly in the text area<br>
+                        • Upload an Excel/CSV file with URLs using the 📁 button<br><br>
+                        I'll extract all the relevant product data and provide export options for your convenience.
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="input-container">
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display: none;">
+            <button class="file-btn" id="fileBtn">📁</button>
+            <div class="input-wrapper">
+                <textarea 
+                    id="inputField" 
+                    class="input-field" 
+                    placeholder="Enter product URLs (one per line or separated by commas)..."
+                    rows="1"
+                ></textarea>
+            </div>
+            <button class="send-btn" id="sendBtn">↑</button>
+        </div>
+    </div>
+    
+    <script>
+        const chatContainer = document.getElementById('chatContainer');
+        const inputField = document.getElementById('inputField');
+        const sendBtn = document.getElementById('sendBtn');
+        const fileBtn = document.getElementById('fileBtn');
+        const fileInput = document.getElementById('fileInput');
+        
+        // File button click handler
+        fileBtn.addEventListener('click', function() {
+            fileInput.click();
+        });
+        
+        // File input change handler
+        fileInput.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const fileName = file.name;
+            const fileExtension = fileName.split('.').pop().toLowerCase();
+            
+            addMessage('User', '📁 Uploaded: ' + fileName, 'user-avatar', 'user');
+            
+            let urls = [];
+            
+            try {
+                // Check if it's an Excel file
+                if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+                    addMessage('AI', '📊 Reading Excel file...', 'ai-avatar', 'ai');
+                    scrollToBottom();
+                    
+                    // Read Excel file using SheetJS
+                    const arrayBuffer = await file.arrayBuffer();
+                    const workbook = XLSX.read(arrayBuffer, { type: 'binary' });
+                    
+                    // Get the first sheet
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // Convert to JSON
+                    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    // Extract URLs from all cells
+                    for (const row of data) {
+                        for (const cell of row) {
+                            const cellValue = String(cell || '').trim();
+                            if (cellValue) {
+                                // Try to extract URLs from the cell
+                                const urlMatch = cellValue.match(/https?:\/\/[^\s,\t]+|www\.[^\s,\t]+/g);
+                                if (urlMatch) {
+                                    urls.push(...urlMatch);
+                                } else if (cellValue.match(/^https?:\/\/|^www\./)) {
+                                    urls.push(cellValue);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Handle CSV or text files
+                    const text = await file.text();
+                    // Parse CSV - extract URLs from the file
+                    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+                    
+                    for (const line of lines) {
+                        // Split by comma if it's a CSV
+                        const parts = line.split(',');
+                        
+                        for (const part of parts) {
+                            const trimmed = part.trim();
+                            // Try to extract URLs from the part
+                            const urlMatch = trimmed.match(/https?:\/\/[^\s,\t]+|www\.[^\s,\t]+/g);
+                            if (urlMatch) {
+                                urls.push(...urlMatch);
+                            } else if (trimmed.match(/^https?:\/\/|^www\./)) {
+                                urls.push(trimmed);
+                            }
+                        }
+                    }
+                }
+                
+                // Remove duplicates
+                const uniqueUrls = [...new Set(urls)];
+                
+                if (uniqueUrls.length === 0) {
+                    addMessage('AI', '❌ No URLs found in the file. Please ensure:\n1. File is in CSV format\n2. URLs are in the first column\n3. Each URL is on a new line or separated by commas', 'ai-avatar', 'ai');
+                    fileInput.value = '';
+                    return;
+                }
+                
+                // Remove loading message if it exists
+                const loadingMessages = chatContainer.querySelectorAll('.message');
+                if (loadingMessages.length > 0 && loadingMessages[loadingMessages.length - 1].querySelector('.message-avatar.ai-avatar') && 
+                    loadingMessages[loadingMessages.length - 1].querySelector('.message-text').textContent.includes('Reading')) {
+                    loadingMessages[loadingMessages.length - 1].remove();
+                }
+                
+                // Show URLs line by line in a user message
+                const urlsDisplay = uniqueUrls.map(url => url.trim()).join('<br>');
+                addMessage('User', urlsDisplay, 'user-avatar', 'user');
+                scrollToBottom();
+                
+                addMessage('AI', '✅ Found ' + uniqueUrls.length + ' URL(s) in the file. Processing...', 'ai-avatar', 'ai');
+                scrollToBottom();
+                
+                // Process URLs from file
+                await processUrls(uniqueUrls);
+                
+            } catch (error) {
+                // Remove loading message if it exists
+                const loadingMessages = chatContainer.querySelectorAll('.message');
+                if (loadingMessages.length > 0 && loadingMessages[loadingMessages.length - 1].querySelector('.message-avatar.ai-avatar')) {
+                    loadingMessages[loadingMessages.length - 1].remove();
+                }
+                
+                addMessage('AI', '❌ Error reading file: ' + error.message, 'ai-avatar', 'ai');
+            }
+            
+            // Reset file input
+            fileInput.value = '';
+        });
+        
+        // Auto-resize textarea
+        inputField.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+        });
+        
+        async function processUrls(urls) {
+            // Clear previous results
+            allResults = [];
+            
+            // Add processing message
+            const processingMsg = addMessage('AI', '⏳ Processing ' + urls.length + ' URL(s). Please wait...', 'ai-avatar', 'ai');
+            scrollToBottom();
+            
+            let completed = 0;
+            const totalUrls = urls.length;
+            
+            // Process all URLs in parallel (batch of 5 to avoid overwhelming)
+            const batchSize = 5;
+            
+            for (let batchStart = 0; batchStart < urls.length; batchStart += batchSize) {
+                const batch = urls.slice(batchStart, batchStart + batchSize);
+                const batchPromises = batch.map(async (url, batchIndex) => {
+                    const i = batchStart + batchIndex;
+                    const urlTrimmed = url.trim();
+                    
+                    try {
+                        const response = await fetch('/extract', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: urlTrimmed })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success && (data.rating || data.rating_count || data.review_count)) {
+                            // Update progress for successful result
+                            completed++;
+                            const progressMsg = document.getElementById(processingMsg);
+                            if (progressMsg) {
+                                const textDiv = progressMsg.querySelector('.message-text');
+                                if (textDiv) {
+                                    const percent = Math.round((completed / totalUrls) * 100);
+                                    textDiv.innerHTML = '⏳ Processing ' + completed + '/' + totalUrls + ' URLs (' + percent + '%). Please wait...';
+                                }
+                            }
+                            // Store result data
+                            allResults.push({
+                                url: urlTrimmed,
+                                rating: data.rating || '',
+                                rating_count: data.rating_count || '',
+                                review_count: data.review_count || ''
+                            });
+                            
+                            let resultHtml = '<div style="background: #f0f9ff; padding: 12px; border-radius: 8px; border-left: 3px solid #10a37f; margin-bottom: 12px;">';
+                            resultHtml += '<strong>✅ URL ' + (i+1) + ' Complete</strong><br>';
+                            resultHtml += '<small style="color: #6b7280; word-break: break-all;"><a href="' + urlTrimmed + '" target="_blank" style="color: #3b82f6; text-decoration: underline;">' + urlTrimmed + '</a></small>';
+                            resultHtml += '</div>';
+                            resultHtml += '<div class="results">';
+                            
+                            if (data.rating) {
+                                resultHtml += '<div class="result-item"><div class="result-label">Rating</div><div class="result-value">' + data.rating + '</div></div>';
+                            }
+                            if (data.rating_count) {
+                                resultHtml += '<div class="result-item"><div class="result-label">Ratings Count</div><div class="result-value">' + data.rating_count + '</div></div>';
+                            }
+                            if (data.review_count) {
+                                resultHtml += '<div class="result-item"><div class="result-label">Reviews Count</div><div class="result-value">' + data.review_count + '</div></div>';
+                            }
+                            resultHtml += '</div>';
+                            addMessage('AI', resultHtml, 'ai-avatar', 'ai');
+                        } else {
+                            // Update progress for failed URLs too
+                            completed++;
+                            const progressMsgFail = document.getElementById(processingMsg);
+                            if (progressMsgFail) {
+                                const textDiv = progressMsgFail.querySelector('.message-text');
+                                if (textDiv) {
+                                    const percent = Math.round((completed / totalUrls) * 100);
+                                    textDiv.innerHTML = '⏳ Processing ' + completed + '/' + totalUrls + ' URLs (' + percent + '%). Please wait...';
+                                }
+                            }
+                            
+                            // Store failed result
+                            allResults.push({
+                                url: urlTrimmed,
+                                rating: '',
+                                rating_count: '',
+                                review_count: data.error || 'No data found'
+                            });
+                            let errorHtml = '<div style="background: #fef2f2; padding: 12px; border-radius: 8px; border-left: 3px solid #ef4444; margin-bottom: 12px;">';
+                            errorHtml += '<strong>❌ URL ' + (i+1) + ' Failed</strong><br>';
+                            errorHtml += '<small style="color: #6b7280; word-break: break-all;"><a href="' + urlTrimmed + '" target="_blank" style="color: #3b82f6; text-decoration: underline;">' + urlTrimmed + '</a></small><br>';
+                            errorHtml += '<span style="color: #dc2626;">' + (data.error || 'No data found') + '</span>';
+                            errorHtml += '</div>';
+                            addMessage('AI', errorHtml, 'ai-avatar', 'ai');
+                        }
+                    } catch (error) {
+                        // Update progress for errors too
+                        completed++;
+                        const progressMsgErr = document.getElementById(processingMsg);
+                        if (progressMsgErr) {
+                            const textDiv = progressMsgErr.querySelector('.message-text');
+                            if (textDiv) {
+                                const percent = Math.round((completed / totalUrls) * 100);
+                                textDiv.innerHTML = '⏳ Processing ' + completed + '/' + totalUrls + ' URLs (' + percent + '%). Please wait...';
+                            }
+                        }
+                        
+                        // Store error result
+                        allResults.push({
+                            url: urlTrimmed,
+                            rating: '',
+                            rating_count: '',
+                            review_count: 'Error: ' + error.message
+                        });
+                        
+                        let errorHtml = '<div style="background: #fef2f2; padding: 12px; border-radius: 8px; border-left: 3px solid #ef4444;">';
+                        errorHtml += '<strong>❌ URL ' + (i+1) + ' Error</strong><br>';
+                        errorHtml += '<small style="color: #6b7280; word-break: break-all;"><a href="' + urlTrimmed + '" target="_blank" style="color: #3b82f6; text-decoration: underline;">' + urlTrimmed + '</a></small><br>';
+                        errorHtml += '<span style="color: #dc2626;">' + error.message + '</span>';
+                        errorHtml += '</div>';
+                        addMessage('AI', errorHtml, 'ai-avatar', 'ai');
+                    }
+                    scrollToBottom();
+                });
+                
+                // Wait for this batch to complete before starting next
+                await Promise.all(batchPromises);
+            }
+            
+            // Remove processing message
+            const progressMsgFinal = document.getElementById(processingMsg);
+            if (progressMsgFinal) {
+                progressMsgFinal.remove();
+            }
+            
+            // Add completion message and export buttons after all URLs are processed
+            if (allResults.length > 0) {
+                addMessage('AI', '✅ <strong>All Process Completed!</strong><br>All ' + allResults.length + ' URL(s) have been processed successfully.', 'ai-avatar', 'ai');
+                addExportButtons();
+                scrollToBottom();
+            }
+        }
+        
+        async function sendMessage() {
+            const text = inputField.value.trim();
+            if (!text) return;
+            
+            // Split by newlines
+            const urls = text.split('\n').filter(line => line.trim());
+            
+            // Format URLs to display line by line
+            const displayText = urls.map(url => url.trim()).join('<br>');
+            
+            // Add user message with formatted URLs
+            addMessage('User', displayText, 'user-avatar', 'user');
+            
+            // Clear input
+            inputField.value = '';
+            inputField.style.height = 'auto';
+            
+            // Process URLs
+            await processUrls(urls);
+        }
+        
+        function addMessage(name, text, avatarClass, type) {
+            const id = 'msg-' + Date.now();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.id = id;
+            messageDiv.innerHTML = `
+                <div class="message-avatar ${avatarClass}">${name}</div>
+                <div class="message-content">
+                    <div class="message-text">${text}</div>
+                </div>
+            `;
+            chatContainer.appendChild(messageDiv);
+            return id;
+        }
+        
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        sendBtn.addEventListener('click', sendMessage);
+        
+        inputField.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        // Global variables for export
+        let allResults = [];
+        
+        function exportToCSV() {
+            if (allResults.length === 0) {
+                addMessage('AI', '❌ No data to export', 'ai-avatar', 'ai');
+                return;
+            }
+            
+            // Create CSV content
+            const headers = ['URL', 'Rating', 'Ratings Count', 'Reviews Count'];
+            const csvContent = [
+                headers.join(','),
+                ...allResults.map(r => [
+                    `"${r.url}"`,
+                    r.rating || '',
+                    r.rating_count || '',
+                    r.review_count || ''
+                ].join(','))
+            ].join('\n');
+            
+            // Create and download file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'url_data_' + new Date().getTime() + '.csv';
+            link.click();
+        }
+        
+        function exportToExcel() {
+            if (allResults.length === 0) {
+                addMessage('AI', '❌ No data to export', 'ai-avatar', 'ai');
+                return;
+            }
+            
+            // Create worksheet data
+            const wsData = [
+                ['URL', 'Rating', 'Ratings Count', 'Reviews Count'],
+                ...allResults.map(r => [
+                    r.url,
+                    r.rating || '',
+                    r.rating_count || '',
+                    r.review_count || ''
+                ])
+            ];
+            
+            // Create workbook and worksheet
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            XLSX.utils.book_append_sheet(wb, ws, 'URL Data');
+            
+            // Write and download file
+            XLSX.writeFile(wb, 'url_data_' + new Date().getTime() + '.xlsx');
+        }
+        
+        function addExportButtons() {
+            const exportHtml = `
+                <div style="background: #f0f9ff; padding: 20px; border-radius: 12px; border: 2px solid #10a37f;">
+                    <h3 style="margin-bottom: 16px; color: #374151; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                        <span>📊</span>
+                        <span>Export All Results</span>
+                    </h3>
+                    <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                        <button onclick="exportToCSV()" style="padding: 12px 24px; background: #10a37f; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                            📄 Export as CSV
+                        </button>
+                        <button onclick="exportToExcel()" style="padding: 12px 24px; background: #5436da; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                            📊 Export as Excel
+                        </button>
+                    </div>
+                    <p style="margin-top: 16px; color: #6b7280; font-size: 14px; font-weight: 600;">
+                        Total URLs Processed: <span style="color: #10a37f; font-size: 16px;">${allResults.length}</span>
+                    </p>
+                </div>
+            `;
+            
+            // Add as AI message
+            addMessage('AI', exportHtml, 'ai-avatar', 'ai');
+            scrollToBottom();
+        }
+        
+        // Make functions globally accessible
+        window.exportToCSV = exportToCSV;
+        window.exportToExcel = exportToExcel;
+        
+        // Clear URL parameters on load
+        if (window.location.search) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,19 @@
+# Python
+*.pyc
+__pycache__/
+
+# Uploads
+uploads/
+
+# Local environment files
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+
+# Local config (keep secret files out)
+*_local.py
+*_secrets.py
+

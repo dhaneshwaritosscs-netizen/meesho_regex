@@ -1,0 +1,3 @@
+{"instruction":"Extract product reviews and ratings as JSON with keys exactly: Rating, Rating_Count, Review_Count. Respond ONLY with a JSON object. Use null for missing fields.","input":"Rating: \"4.3★\" Rating Count: \"18500 Ratings\" Review Count: \"12000 Reviews\"","output":"{\"Rating\": \"4.3★\", \"Rating_Count\": \"18500 Ratings\", \"Review_Count\": \"12000 Reviews\"}"}
+{"instruction":"Extract product reviews and ratings as JSON with keys exactly: Rating, Rating_Count, Review_Count. Respond ONLY with a JSON object. Use null for missing fields.","input":"Rating: \"4.4★\" Rating Count: \"22000 Ratings\" Review Count: \"14000 Reviews\"","output":"{\"Rating\": \"4.4★\", \"Rating_Count\": \"22000 Ratings\", \"Review_Count\": \"14000 Reviews\"}"}
+
