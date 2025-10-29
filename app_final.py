@@ -16,6 +16,9 @@ if sys.platform == 'win32':
 from flask import Flask, request, jsonify
 import re
 import time
+import os
+import shutil
+import subprocess
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 
@@ -433,44 +436,279 @@ def extract_ratings():
         if is_url:
             print(f"[INFO] Detected URL - fetching page...")
             
-            # Setup browser
-            options = uc.ChromeOptions()
-            options.add_argument("--start-maximized")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            
             # Normalize URL
             if input_text.startswith('www.'):
                 input_text = 'https://' + input_text
             elif not input_text.startswith('http'):
                 input_text = 'https://' + input_text
             
-            driver = uc.Chrome(options=options)
+            # Clean up ChromeDriver cache before initialization to avoid file conflicts
+            def cleanup_chromedriver_cache():
+                """Clean up ChromeDriver cache files that might cause conflicts"""
+                try:
+                    cache_dir = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "undetected_chromedriver")
+                    if os.path.exists(cache_dir):
+                        print(f"[INFO] Cleaning up ChromeDriver cache...")
+                        # Remove the entire cache directory to force fresh download
+                        try:
+                            shutil.rmtree(cache_dir)
+                            print(f"[INFO] Removed ChromeDriver cache directory")
+                        except Exception as e:
+                            print(f"[WARNING] Could not remove cache directory: {e}")
+                            # Try to remove specific problematic files
+                            target_file = os.path.join(cache_dir, "undetected_chromedriver.exe")
+                            if os.path.exists(target_file):
+                                try:
+                                    os.remove(target_file)
+                                    print(f"[INFO] Removed problematic file: {target_file}")
+                                except:
+                                    pass
+                            # Try to remove files in nested directories
+                            for root, dirs, files in os.walk(cache_dir):
+                                for file in files:
+                                    if 'chromedriver' in file.lower():
+                                        try:
+                                            file_path = os.path.join(root, file)
+                                            os.remove(file_path)
+                                        except:
+                                            pass
+                except Exception as cleanup_error:
+                    print(f"[WARNING] Cleanup failed: {cleanup_error}")
+            
+            # Get Chrome version for compatibility
+            def get_chrome_version():
+                """Try to detect Chrome version"""
+                try:
+                    # Try to get Chrome version from registry (Windows)
+                    result = subprocess.run(
+                        ['reg', 'query', 'HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon', '/v', 'version'],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if result.returncode == 0:
+                        for line in result.stdout.split('\n'):
+                            if 'version' in line.lower():
+                                version_str = line.split()[-1]
+                                # Extract major version number (e.g., 141 from 141.0.7390.123)
+                                major_version = int(version_str.split('.')[0])
+                                print(f"[INFO] Detected Chrome version: {version_str} (major: {major_version})")
+                                return major_version
+                except Exception as e:
+                    print(f"[INFO] Could not detect Chrome version: {e}")
+                return None
+            
+            # Clean up cache before first attempt
+            cleanup_chromedriver_cache()
+            
+            # Setup browser with proper error handling
+            driver = None
+            max_attempts = 3
+            chrome_version = get_chrome_version()
+            
+            for attempt in range(max_attempts):
+                try:
+                    options = uc.ChromeOptions()
+                    options.add_argument("--start-maximized")
+                    options.add_argument("--no-sandbox")
+                    options.add_argument("--disable-dev-shm-usage")
+                    options.add_argument("--disable-blink-features=AutomationControlled")
+                    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    
+                    # Use detected Chrome version if available, otherwise let uc auto-detect
+                    driver_kwargs = {
+                        'options': options,
+                        'use_subprocess': True,
+                        'driver_executable_path': None
+                    }
+                    
+                    # Specify version_main if we detected it, otherwise let uc handle it
+                    if chrome_version:
+                        driver_kwargs['version_main'] = chrome_version
+                        print(f"[INFO] Using ChromeDriver version {chrome_version} to match Chrome browser")
+                    else:
+                        driver_kwargs['version_main'] = None  # Auto-detect
+                        print(f"[INFO] Auto-detecting ChromeDriver version")
+                    
+                    driver = uc.Chrome(**driver_kwargs)
+                    print(f"[INFO] ChromeDriver initialized successfully")
+                    break
+                    
+                except Exception as driver_error:
+                    error_str = str(driver_error)
+                    print(f"[WARNING] Attempt {attempt + 1}/{max_attempts}: {error_str}")
+                    
+                    # Handle file conflict error (WinError 183) - clean up and retry
+                    if "WinError 183" in error_str or "Cannot create a file when that file already exists" in error_str:
+                        print(f"[INFO] File conflict detected, cleaning up cache...")
+                        cleanup_chromedriver_cache()
+                        time.sleep(1)
+                    
+                    # Handle version mismatch - force cleanup and retry
+                    if "version" in error_str.lower() or "ChromeDriver only supports" in error_str or "session not created" in error_str.lower():
+                        print(f"[INFO] Version mismatch detected, cleaning up cache for fresh download...")
+                        cleanup_chromedriver_cache()
+                        time.sleep(1)
+                    
+                    if attempt < max_attempts - 1:
+                        time.sleep(2)  # Wait before retry
+                    else:
+                        # Last attempt failed, raise the error
+                        raise Exception(f"Failed to initialize ChromeDriver after {max_attempts} attempts: {error_str}")
+            
+            if driver is None:
+                raise Exception("Failed to initialize ChromeDriver")
             
             try:
+                # Set page load timeout
+                driver.set_page_load_timeout(60)  # 60 seconds max for page load
+                
                 print(f"[INFO] Navigating to: {input_text}")
-                driver.get(input_text)
+                try:
+                    driver.get(input_text)
+                    # Initial wait for potential redirects/JavaScript checks
+                    print(f"[INFO] Initial wait for page redirects/checks...")
+                    time.sleep(5)
+                except Exception as nav_error:
+                    # Page load timeout - try to get what we can
+                    nav_error_str = str(nav_error)
+                    if "timeout" in nav_error_str.lower() or "page load" in nav_error_str.lower():
+                        print(f"[WARNING] Page load timeout, trying to get content anyway...")
+                        # Continue - might still have content
+                    else:
+                        raise
                 
-                # Wait for page to load with multiple attempts
-                print(f"[INFO] Waiting for page to load...")
+                # Wait for page to load with multiple attempts and explicit waits
+                print(f"[INFO] Checking page content and waiting for proper load...")
+                from selenium.webdriver.support.ui import WebDriverWait
+                from selenium.webdriver.support import expected_conditions as EC
                 
-                # Wait longer and retry if needed
-                max_retries = 3
+                # Function to check if page is blocked/access denied
+                def is_access_denied(page_source, page_text):
+                    """Check if page shows access denied or blocking message"""
+                    if not page_source and not page_text:
+                        return True
+                    
+                    blocked_keywords = [
+                        'access denied', 'blocked', 'cloudflare', 
+                        'checking your browser', 'please wait', 
+                        'verify you are human', 'challenge',
+                        'temporarily unavailable', 'bot detected',
+                        'rate limited', '403 forbidden', 'forbidden',
+                        'unauthorized access', 'permission denied'
+                    ]
+                    
+                    combined_text = (page_source or '').lower() + ' ' + (page_text or '').lower()
+                    
+                    # Check for keywords
+                    for keyword in blocked_keywords:
+                        if keyword in combined_text:
+                            return True
+                    
+                    # Also check if page is too short and contains common blocking indicators
+                    if len(combined_text) < 200:
+                        if any(indicator in combined_text for indicator in ['cloudflare', 'checking', 'wait']):
+                            return True
+                    
+                    return False
+                
+                page_text = None
+                page_source = None
+                max_retries = 8  # Increased retries for access denied scenarios
+                access_denied_retries = 3  # Specific retries for access denied
+                
                 for attempt in range(max_retries):
-                    time.sleep(8)
                     try:
+                        # Wait for body element with explicit wait
+                        wait = WebDriverWait(driver, 10)
+                        body_element = wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
+                        
+                        # Get page content
                         page_text = driver.find_element(By.TAG_NAME, 'body').text
+                        page_source = driver.page_source
+                        
+                        # Check if we're on an access denied page
+                        if is_access_denied(page_source, page_text):
+                            print(f"[WARNING] Attempt {attempt+1}: Access denied/blocked page detected")
+                            
+                            # If this is early in attempts, wait and refresh
+                            if attempt < access_denied_retries:
+                                print(f"[INFO] Waiting for page to redirect/reload (attempt {attempt+1}/{access_denied_retries})...")
+                                time.sleep(8)  # Wait longer for redirect
+                                
+                                # Try refreshing the page
+                                print(f"[INFO] Attempting to refresh page...")
+                                try:
+                                    driver.refresh()
+                                    time.sleep(5)  # Wait after refresh
+                                    
+                                    # Check again after refresh
+                                    page_text = driver.find_element(By.TAG_NAME, 'body').text
+                                    page_source = driver.page_source
+                                    
+                                    if not is_access_denied(page_source, page_text):
+                                        print(f"[INFO] Page loaded successfully after refresh!")
+                                        break
+                                    else:
+                                        print(f"[INFO] Still blocked after refresh, will retry...")
+                                except Exception as refresh_error:
+                                    print(f"[WARNING] Refresh failed: {refresh_error}")
+                            else:
+                                print(f"[INFO] Access denied persisted after {access_denied_retries} attempts")
+                            continue
+                        
+                        # Check if we have sufficient content
                         if len(page_text) > 100:  # Got some content
                             print(f"[INFO] Page loaded successfully! Length: {len(page_text)} characters")
                             break
                         else:
-                            print(f"[INFO] Attempt {attempt+1}: Page text too short ({len(page_text)} chars), retrying...")
-                    except:
-                        print(f"[INFO] Attempt {attempt+1}: Error getting page content, retrying...")
-                else:
-                    page_text = driver.find_element(By.TAG_NAME, 'body').text
+                            print(f"[INFO] Attempt {attempt+1}: Page text too short ({len(page_text)} chars), waiting more...")
+                            time.sleep(5)  # Wait longer for dynamic content
+                            
+                    except Exception as wait_error:
+                        error_str = str(wait_error)
+                        print(f"[INFO] Attempt {attempt+1}: {error_str}")
+                        if attempt < max_retries - 1:
+                            # If error, try refreshing once
+                            if attempt == max_retries // 2:  # Try refresh at midpoint
+                                try:
+                                    print(f"[INFO] Attempting page refresh due to error...")
+                                    driver.refresh()
+                                    time.sleep(5)
+                                except:
+                                    pass
+                            time.sleep(5)
+                        else:
+                            # Last attempt - try to get whatever we can
+                            try:
+                                page_text = driver.find_element(By.TAG_NAME, 'body').text
+                                page_source = driver.page_source
+                            except Exception as e:
+                                try:
+                                    page_source = driver.page_source  # Fallback to page source
+                                    page_text = ""  # Will use page_source for extraction
+                                except:
+                                    raise Exception(f"Could not retrieve page content: {str(wait_error)}")
+                
+                # Final check if we still have access denied
+                if page_source:
+                    final_page_text = page_text or ""
+                    if is_access_denied(page_source, final_page_text):
+                        print(f"[WARNING] Final page still shows access denied, but attempting extraction anyway...")
+                        # Continue anyway - might have some useful data
+                
+                if not page_text or len(page_text) < 50:
+                    # Try using page_source if page_text is insufficient
+                    if page_source and len(page_source) > 500:
+                        print(f"[INFO] Using page source for extraction (text too short)")
+                        # Extract text from HTML as fallback
+                        from bs4 import BeautifulSoup
+                        try:
+                            soup = BeautifulSoup(page_source, 'html.parser')
+                            page_text = soup.get_text()
+                        except:
+                            page_text = page_source
+                    
+                    if (not page_text or len(page_text) < 50) and (not page_source or len(page_source) < 500):
+                        raise Exception("Could not load page content - page may be blocking automation or taking too long to load")
                 
                 print(f"[INFO] Final page text length: {len(page_text)} characters")
                 
@@ -483,9 +721,10 @@ def extract_ratings():
                 
             finally:
                 try:
-                    driver.quit()
-                except:
-                    pass
+                    if driver:
+                        driver.quit()
+                except Exception as quit_error:
+                    print(f"[WARNING] Error closing driver: {quit_error}")
         else:
             # Extract from text directly
             print(f"[INFO] Processing as text...")
@@ -508,10 +747,24 @@ def extract_ratings():
             
     except Exception as e:
         error_msg = str(e)
+        import traceback
+        error_trace = traceback.format_exc()
         print(f"[ERROR] {error_msg}")
+        print(f"[ERROR] Traceback: {error_trace}")
+        
+        # Provide more user-friendly error messages
+        if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+            user_error = "Request timed out - the website took too long to respond. Please try again."
+        elif "could not load page content" in error_msg.lower() or "blocking automation" in error_msg.lower():
+            user_error = "Could not access page - the website may be blocking automated access or the page structure changed."
+        elif "Failed to initialize ChromeDriver" in error_msg:
+            user_error = "Browser initialization failed. Please restart the application."
+        else:
+            user_error = f"Failed to extract: {error_msg[:200]}"  # Limit error message length
+        
         return jsonify({
             'success': False,
-            'error': f'Failed to extract: {error_msg}'
+            'error': user_error
         })
 
 if __name__ == '__main__':

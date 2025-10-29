@@ -473,11 +473,22 @@
                     const urlTrimmed = url.trim();
                     
                     try {
+                        // Create AbortController for timeout
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
+                        
                         const response = await fetch('/extract', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: urlTrimmed })
+                            body: JSON.stringify({ text: urlTrimmed }),
+                            signal: controller.signal
                         });
+                        
+                        clearTimeout(timeoutId);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
                         
                         const data = await response.json();
                         
@@ -555,18 +566,30 @@
                             }
                         }
                         
+                        // Better error message handling
+                        let errorMessage = error.message || 'Unknown error';
+                        
+                        // Handle specific error types
+                        if (error.name === 'AbortError') {
+                            errorMessage = 'Request timeout - the page took too long to load (2+ minutes). Try again or check if the URL is accessible.';
+                        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                            errorMessage = 'Network error - could not connect to server. The server may be busy or the request timed out. Please try again.';
+                        } else if (error.message.includes('timeout')) {
+                            errorMessage = 'Request timeout - the extraction took too long. The website may be slow or blocking requests.';
+                        }
+                        
                         // Store error result
                         allResults.push({
                             url: urlTrimmed,
                             rating: '',
                             rating_count: '',
-                            review_count: 'Error: ' + error.message
+                            review_count: 'Error: ' + errorMessage
                         });
                         
                         let errorHtml = '<div style="background: #fef2f2; padding: 12px; border-radius: 8px; border-left: 3px solid #ef4444;">';
                         errorHtml += '<strong>❌ URL ' + (i+1) + ' Error</strong><br>';
                         errorHtml += '<small style="color: #6b7280; word-break: break-all;"><a href="' + urlTrimmed + '" target="_blank" style="color: #3b82f6; text-decoration: underline;">' + urlTrimmed + '</a></small><br>';
-                        errorHtml += '<span style="color: #dc2626;">' + error.message + '</span>';
+                        errorHtml += '<span style="color: #dc2626;">' + errorMessage + '</span>';
                         errorHtml += '</div>';
                         addMessage('AI', errorHtml, 'ai-avatar', 'ai');
                     }

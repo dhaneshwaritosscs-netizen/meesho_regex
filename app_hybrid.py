@@ -20,6 +20,8 @@ import os
 from flask import Flask, request, jsonify
 import re
 import time
+import shutil
+import subprocess
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 
@@ -410,15 +412,120 @@ def extract_ratings():
         elif not input_text.startswith('http'):
             input_text = 'https://' + input_text
         
-        # Setup browser
-        options = uc.ChromeOptions()
-        options.add_argument("--start-maximized")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        # Clean up ChromeDriver cache before initialization to avoid file conflicts
+        def cleanup_chromedriver_cache():
+            """Clean up ChromeDriver cache files that might cause conflicts"""
+            try:
+                cache_dir = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "undetected_chromedriver")
+                if os.path.exists(cache_dir):
+                    print(f"[INFO] Cleaning up ChromeDriver cache...")
+                    # Remove the entire cache directory to force fresh download
+                    try:
+                        shutil.rmtree(cache_dir)
+                        print(f"[INFO] Removed ChromeDriver cache directory")
+                    except Exception as e:
+                        print(f"[WARNING] Could not remove cache directory: {e}")
+                        # Try to remove specific problematic files
+                        target_file = os.path.join(cache_dir, "undetected_chromedriver.exe")
+                        if os.path.exists(target_file):
+                            try:
+                                os.remove(target_file)
+                                print(f"[INFO] Removed problematic file: {target_file}")
+                            except:
+                                pass
+                        # Try to remove files in nested directories
+                        for root, dirs, files in os.walk(cache_dir):
+                            for file in files:
+                                if 'chromedriver' in file.lower():
+                                    try:
+                                        file_path = os.path.join(root, file)
+                                        os.remove(file_path)
+                                    except:
+                                        pass
+            except Exception as cleanup_error:
+                print(f"[WARNING] Cleanup failed: {cleanup_error}")
         
-        driver = uc.Chrome(options=options)
+        # Get Chrome version for compatibility
+        def get_chrome_version():
+            """Try to detect Chrome version"""
+            try:
+                # Try to get Chrome version from registry (Windows)
+                result = subprocess.run(
+                    ['reg', 'query', 'HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon', '/v', 'version'],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.split('\n'):
+                        if 'version' in line.lower():
+                            version_str = line.split()[-1]
+                            # Extract major version number (e.g., 141 from 141.0.7390.123)
+                            major_version = int(version_str.split('.')[0])
+                            print(f"[INFO] Detected Chrome version: {version_str} (major: {major_version})")
+                            return major_version
+            except Exception as e:
+                print(f"[INFO] Could not detect Chrome version: {e}")
+            return None
+        
+        # Clean up cache before first attempt
+        cleanup_chromedriver_cache()
+        
+        # Setup browser with proper error handling
+        driver = None
+        max_attempts = 3
+        chrome_version = get_chrome_version()
+        
+        for attempt in range(max_attempts):
+            try:
+                options = uc.ChromeOptions()
+                options.add_argument("--start-maximized")
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--disable-blink-features=AutomationControlled")
+                options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                
+                # Use detected Chrome version if available, otherwise let uc auto-detect
+                driver_kwargs = {
+                    'options': options,
+                    'use_subprocess': True,
+                    'driver_executable_path': None
+                }
+                
+                # Specify version_main if we detected it, otherwise let uc handle it
+                if chrome_version:
+                    driver_kwargs['version_main'] = chrome_version
+                    print(f"[INFO] Using ChromeDriver version {chrome_version} to match Chrome browser")
+                else:
+                    driver_kwargs['version_main'] = None  # Auto-detect
+                    print(f"[INFO] Auto-detecting ChromeDriver version")
+                
+                driver = uc.Chrome(**driver_kwargs)
+                print(f"[INFO] ChromeDriver initialized successfully")
+                break
+                
+            except Exception as driver_error:
+                error_str = str(driver_error)
+                print(f"[WARNING] Attempt {attempt + 1}/{max_attempts}: {error_str}")
+                
+                # Handle file conflict error (WinError 183) - clean up and retry
+                if "WinError 183" in error_str or "Cannot create a file when that file already exists" in error_str:
+                    print(f"[INFO] File conflict detected, cleaning up cache...")
+                    cleanup_chromedriver_cache()
+                    time.sleep(1)
+                
+                # Handle version mismatch - force cleanup and retry
+                if "version" in error_str.lower() or "ChromeDriver only supports" in error_str or "session not created" in error_str.lower():
+                    print(f"[INFO] Version mismatch detected, cleaning up cache for fresh download...")
+                    cleanup_chromedriver_cache()
+                    time.sleep(1)
+                
+                if attempt < max_attempts - 1:
+                    time.sleep(2)  # Wait before retry
+                else:
+                    # Last attempt failed, raise the error
+                    raise Exception(f"Failed to initialize ChromeDriver after {max_attempts} attempts: {error_str}")
+        
+        if driver is None:
+            raise Exception("Failed to initialize ChromeDriver")
         
         try:
             print(f"[INFO] Navigating to: {input_text}")
